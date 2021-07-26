@@ -1,0 +1,12 @@
+{:paths ["src"]
+
+ :deps {org.clojure/clojure {:mvn/version "1.10.3"}
+        org.clojure/core.async {:mvn/version "1.3.618"}
+        net.clojars.luchiniatwork/anomalies {:mvn/version "0.0.2"}
+        borkdude/edamame {:mvn/version "0.0.11"}
+        metosin/jsonista {:mvn/version "0.3.3"}
+        hyperfiddle/rcf {:git/url "https://github.com/hyperfiddle/rcf.git"
+                         :sha "278e85015db315cae3b2301b3a197f7af2affe72"}}
+
+ :aliases
+ {:dev {:extra-paths ["dev"]}}}
