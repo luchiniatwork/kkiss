@@ -1,7 +1,7 @@
 (ns kkiss.engine
   (:require [anomalies.core :as anom]))
 
-(defmulti create-engine (fn [{:keys [config] :as opts}] (:engine-id config)))
+(defmulti create-engine (fn [{:keys [engine-id] :as opts}] engine-id))
 
 (defmethod create-engine :default [_]
   (anom/throw-anom "Not implemented" {::anom/category ::anom/incorrect}))

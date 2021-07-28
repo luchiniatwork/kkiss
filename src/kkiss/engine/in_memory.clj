@@ -29,9 +29,10 @@
   (when (= :stopped @state)
     (doseq [sub-chan sub-chans]
       (go-loop []
-        (let [event (<! sub-chan)]
-          (handle-fn (-> event :payload first)
-                     (-> event :payload last)))
+        (let [{:keys [stream payload] :as event} (<! sub-chan)]
+          (handle-fn stream
+                     (first payload)
+                     (second payload)))
         (when (= :running @state)
           (recur))))
     (reset! state :running)))
