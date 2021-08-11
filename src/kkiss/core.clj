@@ -82,7 +82,9 @@
 
   (def e (engine {:engine-id :kafka
                   :streams {:test-stream {:key.serde (serde/serde :keyword)
-                                          :value.serde (serde/serde :keyword)}}
+                                          :value.serde (serde/serde :keyword)
+                                          :partitions 1
+                                          :replication 3}}
                   :conn {:nodes [["pkc-419q3.us-east4.gcp.confluent.cloud" 9092]]}
                   :config (merge base-config
                                  {"client.id" "my-producer"

@@ -25,16 +25,36 @@
      :conn conn
      :config config}))
 
+(defn ^:private create-topic [{:keys [conn config streams]} stream]
+  (println "creating topic")
+  (let [{:keys [nodes]} conn
+        {:keys [partitions replication]
+         :or {partitions 1 replication 3}} (get streams stream)
+        topic-name (topic-name-serializer stream)]
+    (with-open [client (admin/admin {::admin/configuration config
+                                     ::kafka/nodes nodes})]
+      @(get (admin/create-topics client
+                                 {topic-name
+                                  {::admin/number-of-partitions partitions
+                                   ::admin/replication-factor replication}})
+            topic-name)
+      )))
+
 (defmethod engine/send! :kafka [{:keys [producer] :as engine} stream k v]
   (try
     @(out/send producer {::kafka/topic (topic-name-serializer stream)
                          ::kafka/key k
                          ::kafka/value v})
-    (catch org.apache.kafka.common.errors.InvalidTopicException ex
-      (println "DEU MERDAAAAA!!!"))
     (catch Throwable t
-      (println "dia ruim" (type t))
-      (println t))))
+      (println "deu ruim")
+      (if (= org.apache.kafka.common.errors.InvalidTopicException (type (.getCause t)))
+        (do
+          (create-topic engine stream)
+          (println "came back, trying again")
+          @(out/send producer {::kafka/topic (topic-name-serializer stream)
+                               ::kafka/key k
+                               ::kafka/value v}))
+        (throw t)))))
 
 (defmethod engine/consumer :kafka [{:keys [config conn] :as engine} opts streams handle-fn]
   (let [{:keys [nodes]} conn
