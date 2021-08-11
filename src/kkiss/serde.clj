@@ -1,7 +1,7 @@
 (ns kkiss.serde
   (:require [clojure.string        :as s]
             [edamame.core          :as edamame]
-            [hyperfiddle.rcf       :refer [tests]]
+            #_[hyperfiddle.rcf       :refer [tests]]
             [jsonista.core         :as json]
             [jsonista.tagged       :as jt]))
 
@@ -66,16 +66,16 @@
    :deserializer (deserializer kind)})
 
 
-(tests
+#_(tests
 
-  (tests
+   (tests
     ((deserializer :string) ((serializer :string) "Hello")) := "Hello")
 
-  (tests
+   (tests
     ((deserializer :keyword) ((serializer :keyword) :foobar)) := :foobar
     ((deserializer :keyword) ((serializer :keyword) :foo/bar)) := :foo/bar)
 
-  (tests
+   (tests
     ((deserializer :edn) ((serializer :edn) {:a :b})) := {:a :b}
     ((deserializer :edn) ((serializer :edn) {:foo/a 'b
                                              "vals" ['qwe/rty
@@ -84,7 +84,7 @@
                                                                               '(1 4.5)]}
     ((deserializer :edn {:fn true}) ((serializer :string) "#(* % %1 %2)")) := '(fn* [%1 %2] (* %1 %1 %2)))
 
-  (tests
+   (tests
     ((deserializer :json) ((serializer :json) {"a" "b"})) := {"a" "b"}
     (let [mapper (json/object-mapper
                   {:encode-key-fn true
@@ -103,7 +103,7 @@
       ((deserializer :json mapper) ((serializer :json mapper)
                                     {:system/status #{:status/good}}))) := {:system/status #{:status/good}})
 
-  (tests
+   (tests
 
     (let [bytes (.getBytes ":foo/bar")
           {:keys [serializer deserializer]} (serde :keyword)]
@@ -112,4 +112,4 @@
     )
 
 
-  )
+   )

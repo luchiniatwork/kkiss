@@ -1,5 +1,5 @@
 (ns kkiss.core
-  (:require [hyperfiddle.rcf :refer [tests]]
+  (:require #_[hyperfiddle.rcf :refer [tests]]
             [kkiss.engine :as engine]
             [kkiss.serde :as serde]
             [^:keep kkiss.engine.in-memory]
@@ -27,33 +27,33 @@
   (engine/stop! consumer))
 
 
-(tests
-  (let [streams {:my-stream-a {:key.serde (serde/serde :keyword)
-                               :value.serde (serde/serde :keyword)}
-                 :my-stream-b {:key.serde (serde/serde :keyword)
-                               :value.serde (serde/serde :keyword)}}
-        e (engine {:engine-id :in-memory
-                   :streams streams})
-        c1-visited (atom 0)
-        c2-visited (atom 0)
-        c1 (consumer e {} [:my-stream-a] (fn [_ k v]
-                                           (when (and (= k :foo)
-                                                      (= v :bar))
-                                             (swap! c1-visited inc))))
-        c2 (consumer e {} [:my-stream-a
-                           :my-stream-b] (fn [_ k v]
-                                           (when (and (= k :foo)
-                                                      (= v :bar))
-                                             (swap! c2-visited inc))))]
-    (start! c1)
-    (start! c2)
-    (send! e :my-stream-a :foo :bar)
-    (send! e :my-stream-b :foo :bar)
-    (Thread/sleep 50)
-    [@c1-visited @c2-visited]) := [1 2]
+#_(tests
+   (let [streams {:my-stream-a {:key.serde (serde/serde :keyword)
+                                :value.serde (serde/serde :keyword)}
+                  :my-stream-b {:key.serde (serde/serde :keyword)
+                                :value.serde (serde/serde :keyword)}}
+         e (engine {:engine-id :in-memory
+                    :streams streams})
+         c1-visited (atom 0)
+         c2-visited (atom 0)
+         c1 (consumer e {} [:my-stream-a] (fn [_ k v]
+                                            (when (and (= k :foo)
+                                                       (= v :bar))
+                                              (swap! c1-visited inc))))
+         c2 (consumer e {} [:my-stream-a
+                            :my-stream-b] (fn [_ k v]
+                                            (when (and (= k :foo)
+                                                       (= v :bar))
+                                              (swap! c2-visited inc))))]
+     (start! c1)
+     (start! c2)
+     (send! e :my-stream-a :foo :bar)
+     (send! e :my-stream-b :foo :bar)
+     (Thread/sleep 50)
+     [@c1-visited @c2-visited]) := [1 2]
 
 
-  )
+   )
 
 
 
