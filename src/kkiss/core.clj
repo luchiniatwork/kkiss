@@ -65,9 +65,9 @@
 
   (send! e :foo :k1 :v1)
   
-  (def c1 (consumer e {} [:foo :bar] (fn [k v] (println "for c1 - k" k "v" v))))
+  (def c1 (consumer e {} [:foo :bar] (fn [_ k v] (println "for c1 - k" k "v" v))))
 
-  (def c2 (consumer e {} [:foo :ball] (fn [k v] (println "for c2 - k" k "v" v))))  
+  (def c2 (consumer e {} [:foo :ball] (fn [_ k v] (println "for c2 - k" k "v" v))))
   
   )
 

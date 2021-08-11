@@ -1,28 +1,20 @@
 ``` clojure
-(def config {:implementation :in-memory})
-
-(def streams
-  {:my-topic1 {:key.serde (k/serde :keyword)
-               :value.serde (k/serde :edn)}})
-
-(def engine (k/engine {:streams streams
-                       :config config}))
+(def engine (k/engine {:engine-id :in-memory
+                       :streams {:foo {:key.serde (serde/serde :keyword)
+                                       :value.serde (serde/serde :keyword)}}}))
 
 (k/send! engine
-         :my-topic1
-         :my-key {:foo :bar})
+         :foo
+         :my-key {:foo-key1 :bar-value1
+                  :foo-key2 :bar-value2})
 
 (def consumer
   (k/consumer engine {:group.id :a})
-  [:my-topic1]
-  (fn [k v] (println "key" k "; value" v)))
+  [:foo]
+  (fn [s k v] (println "stream" s "key" k " value" v)))
 
 
 (k/start! consumer)
-
-(k/pause! consumer)
-
-(k/resume! consumer)
 
 (k/stop! consumer)
 ```
