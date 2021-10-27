@@ -17,7 +17,10 @@
   (let [wrapper (fn [stream k v]
                   (let [k-de (get-in engine [:streams stream :key.serde :deserializer])
                         v-de (get-in engine [:streams stream :value.serde :deserializer])]
-                    (handle-fn stream (k-de k) (v-de v))))]
+                    (try
+                      (handle-fn stream (k-de k) (v-de v))
+                      (catch Throwable _
+                        (comment "ignore exception for now")))))]
     (engine/consumer engine opts streams wrapper)))
 
 (defn start! [consumer]
@@ -28,32 +31,52 @@
 
 
 #_(tests
-   (let [streams {:my-stream-a {:key.serde (serde/serde :keyword)
-                                :value.serde (serde/serde :keyword)}
-                  :my-stream-b {:key.serde (serde/serde :keyword)
-                                :value.serde (serde/serde :keyword)}}
-         e (engine {:engine-id :in-memory
-                    :streams streams})
-         c1-visited (atom 0)
-         c2-visited (atom 0)
-         c1 (consumer e {} [:my-stream-a] (fn [_ k v]
-                                            (when (and (= k :foo)
-                                                       (= v :bar))
-                                              (swap! c1-visited inc))))
-         c2 (consumer e {} [:my-stream-a
-                            :my-stream-b] (fn [_ k v]
-                                            (when (and (= k :foo)
-                                                       (= v :bar))
-                                              (swap! c2-visited inc))))]
-     (start! c1)
-     (start! c2)
-     (send! e :my-stream-a :foo :bar)
-     (send! e :my-stream-b :foo :bar)
-     (Thread/sleep 50)
-     [@c1-visited @c2-visited]) := [1 2]
+    "several consumers"
+    (let [streams {:my-stream-a {:key.serde (serde/serde :keyword)
+                                 :value.serde (serde/serde :keyword)}
+                   :my-stream-b {:key.serde (serde/serde :keyword)
+                                 :value.serde (serde/serde :keyword)}}
+          e (engine {:engine-id :in-memory
+                     :streams streams})
+          c1-visited (atom 0)
+          c2-visited (atom 0)
+          c1 (consumer e {} [:my-stream-a] (fn [_ k v]
+                                             (when (and (= k :foo)
+                                                        (= v :bar))
+                                               (swap! c1-visited inc))))
+          c2 (consumer e {} [:my-stream-a
+                             :my-stream-b] (fn [_ k v]
+                                             (when (and (= k :foo)
+                                                        (= v :bar))
+                                               (swap! c2-visited inc))))]
+      (start! c1)
+      (start! c2)
+      (send! e :my-stream-a :foo :bar)
+      (send! e :my-stream-b :foo :bar)
+      (Thread/sleep 50)
+      [@c1-visited @c2-visited]) := [1 2]
 
+    "throw does not break consumer"
+    (let [streams {:my-stream-a {:key.serde (serde/serde :keyword)
+                                 :value.serde (serde/serde :keyword)}}
+          e (engine {:engine-id :in-memory
+                     :streams streams})
+          c-visited (atom 0)
+          c (consumer e {} [:my-stream-a] (fn [_ k v]
+                                            (if (and (= k :foo)
+                                                     (= v :bar))
+                                              (swap! c-visited inc)
+                                              (throw (ex-info "invalid msg" {})))))
+          ]
+      (start! c)
+      (send! e :my-stream-a :foo :bar)
+      (send! e :my-stream-a :foo :ball)
+      (send! e :my-stream-a :foo :bar)
+      (Thread/sleep 50)
+      @c-visited) := 2
 
-   )
+    
+    )
 
 
 
