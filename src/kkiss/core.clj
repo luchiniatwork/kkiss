@@ -5,23 +5,36 @@
             [^:keep kkiss.engine.in-memory]
             [^:keep kkiss.engine.kafka]))
 
-(defn engine [{:keys [streams config] :as opts}]
+(defn engine [{:keys [config] :as opts}]
   (engine/create-engine opts))
 
-(defn send! [engine stream k v]
-  (let [k-ser (get-in engine [:streams stream :key.serde :serializer])
-        v-ser (get-in engine [:streams stream :value.serde :serializer])]
-    (engine/send! engine stream (k-ser k) (v-ser v))))
+(defn stream [opts]
+  (engine/stream opts))
 
-(defn consumer [engine opts streams handle-fn]
-  (let [wrapper (fn [stream k v]
-                  (let [k-de (get-in engine [:streams stream :key.serde :deserializer])
-                        v-de (get-in engine [:streams stream :value.serde :deserializer])]
-                    (try
-                      (handle-fn stream (k-de k) (v-de v))
-                      (catch Throwable _
-                        (comment "ignore exception for now")))))]
-    (engine/consumer engine opts streams wrapper)))
+(defn send! [stream k v]
+  (let [k-ser (get-in stream [:key.serde :serializer])
+        v-ser (get-in stream [:value.serde :serializer])]
+    (engine/send! stream (k-ser k) (v-ser v))))
+
+(defn ^:private find-stream [streams stream-name]
+  (->> streams
+       (filter #(= stream-name (:name %)))
+       first))
+
+(defn consumer
+  ([streams handle-fn]
+   (consumer streams handle-fn nil))
+  ([streams handle-fn opts]
+   (let [wrapper (fn [stream-name k v]
+                   (let [k-de (-> streams (find-stream stream-name)
+                                  (get-in [:key.serde :deserializer]))
+                         v-de (-> streams (find-stream stream-name)
+                                  (get-in [:value.serde :deserializer]))]
+                     (try
+                       (handle-fn stream (k-de k) (v-de v))
+                       (catch Throwable _
+                         (comment "ignore exception for now")))))]
+     (engine/consumer streams wrapper opts))))
 
 (defn start! [consumer]
   (engine/start! consumer))
@@ -31,52 +44,54 @@
 
 
 #_(tests
-    "several consumers"
-    (let [streams {:my-stream-a {:key.serde (serde/serde :keyword)
-                                 :value.serde (serde/serde :keyword)}
-                   :my-stream-b {:key.serde (serde/serde :keyword)
-                                 :value.serde (serde/serde :keyword)}}
-          e (engine {:engine-id :in-memory
-                     :streams streams})
-          c1-visited (atom 0)
-          c2-visited (atom 0)
-          c1 (consumer e {} [:my-stream-a] (fn [_ k v]
-                                             (when (and (= k :foo)
-                                                        (= v :bar))
-                                               (swap! c1-visited inc))))
-          c2 (consumer e {} [:my-stream-a
-                             :my-stream-b] (fn [_ k v]
-                                             (when (and (= k :foo)
-                                                        (= v :bar))
-                                               (swap! c2-visited inc))))]
-      (start! c1)
-      (start! c2)
-      (send! e :my-stream-a :foo :bar)
-      (send! e :my-stream-b :foo :bar)
-      (Thread/sleep 50)
-      [@c1-visited @c2-visited]) := [1 2]
+   "several consumers"
+   (let [e (engine {:engine-id :in-memory})
+         stream-a (stream {:engine e
+                           :name :my-stream-a
+                           :key.serde (serde/serde :keyword)
+                           :value.serde (serde/serde :keyword)})
+         stream-b (stream {:engine e
+                           :name :my-stream-b
+                           :key.serde (serde/serde :keyword)
+                           :value.serde (serde/serde :keyword)})
+         c1-visited (atom 0)
+         c2-visited (atom 0)
+         c1 (consumer [stream-a] (fn [s-name k v]
+                                   (when (and (= k :foo)
+                                              (= v :bar))
+                                     (swap! c1-visited inc))))
+         c2 (consumer [stream-a stream-b] (fn [_ k v]
+                                            (when (and (= k :foo)
+                                                       (= v :bar))
+                                              (swap! c2-visited inc))))]
+     (start! c1)
+     (start! c2)
+     (send! stream-a :foo :bar)
+     (send! stream-b :foo :bar)
+     (Thread/sleep 50)
+     [@c1-visited @c2-visited]) := [1 2]
 
-    "throw does not break consumer"
-    (let [streams {:my-stream-a {:key.serde (serde/serde :keyword)
-                                 :value.serde (serde/serde :keyword)}}
-          e (engine {:engine-id :in-memory
-                     :streams streams})
-          c-visited (atom 0)
-          c (consumer e {} [:my-stream-a] (fn [_ k v]
-                                            (if (and (= k :foo)
-                                                     (= v :bar))
-                                              (swap! c-visited inc)
-                                              (throw (ex-info "invalid msg" {})))))
-          ]
-      (start! c)
-      (send! e :my-stream-a :foo :bar)
-      (send! e :my-stream-a :foo :ball)
-      (send! e :my-stream-a :foo :bar)
-      (Thread/sleep 50)
-      @c-visited) := 2
+   "throw does not break consumer"
+   (let [e (engine {:engine-id :in-memory})
+         stream-a (stream {:engine e
+                           :name :my-stream-a
+                           :key.serde (serde/serde :keyword)
+                           :value.serde (serde/serde :keyword)})
+         c-visited (atom 0)
+         c (consumer [stream-a] (fn [_ k v]
+                                  (if (and (= k :foo)
+                                           (= v :bar))
+                                    (swap! c-visited inc)
+                                    (throw (ex-info "invalid msg" {})))))]
+     (start! c)
+     (send! stream-a :foo :bar)
+     (send! stream-a :foo :ball)
+     (send! stream-a :foo :bar)
+     (Thread/sleep 50)
+     @c-visited) := 2
 
-    
-    )
+   
+   )
 
 
 

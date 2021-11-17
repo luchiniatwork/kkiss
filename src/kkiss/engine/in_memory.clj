@@ -2,40 +2,42 @@
   (:require [kkiss.engine :as engine]
             [clojure.core.async :refer [<! >! go go-loop chan pub sub put!]]))
 
-(defmethod engine/create-engine :in-memory [{:keys [streams config] :as opts}]
+(defmethod engine/create-engine :in-memory [{:keys [config] :as opts}]
+  {:engine-id :in-memory})
+
+(defmethod engine/stream :in-memory [{:keys [engine] :as opts}]
   (let [in-chan (chan 1024)]
-    {:engine-id :in-memory
-     :streams streams
-     :in-chan in-chan
-     :stream-pub (pub in-chan :stream)}))
+    (assoc opts
+           :in-chan in-chan
+           :stream-pub (pub in-chan :stream-name))))
 
-(defmethod engine/send! :in-memory [{:keys [in-chan] :as engine} stream k v]
-  (put! in-chan {:stream stream
-                 :payload [k v]}))
+(defmethod engine/send! :in-memory [{:keys [in-chan] :as stream} k v]
+  (put! in-chan {:stream-name (:name stream)
+                 :stream-payload [k v]}))
 
-(defmethod engine/consumer :in-memory [{:keys [stream-pub] :as engine} opts streams handle-fn]  
-  (let [sub-chans (mapv (fn [stream]
+(defmethod engine/consumer :in-memory
+  [streams handle-fn opts]
+  (let [sub-chans (mapv (fn [{:keys [stream-pub] :as stream}]
                           (let [sub-chan (chan 256)]
-                            (sub stream-pub stream sub-chan)
+                            (sub stream-pub (:name stream) sub-chan)
                             sub-chan))
                         streams)]
-    {:engine engine
-     :streams streams
+    {:streams streams
      :sub-chans sub-chans
      :handle-fn handle-fn
      :state (atom :stopped)}))
 
 (defmethod engine/start! :in-memory [{:keys [sub-chans handle-fn state] :as consumer}]
   (when (= :stopped @state)
+    (reset! state :running)
     (doseq [sub-chan sub-chans]
       (go-loop []
-        (let [{:keys [stream payload] :as event} (<! sub-chan)]
-          (handle-fn stream
-                     (first payload)
-                     (second payload)))
+        (let [{:keys [stream-name stream-payload] :as event} (<! sub-chan)]
+          (handle-fn stream-name
+                     (first stream-payload)
+                     (second stream-payload)))
         (when (= :running @state)
-          (recur))))
-    (reset! state :running)))
+          (recur))))))
 
 
 (defmethod engine/stop! :in-memory [{:keys [sub-chans handle-fn state] :as consumer}]
