@@ -96,19 +96,6 @@
 
 
 
-(comment
-  (def e (engine {:engine-id :in-memory
-                  :streams {:foo {:key.serde (serde/serde :keyword)
-                                  :value.serde (serde/serde :keyword)}}}))
-
-  (send! e :foo :k1 :v1)
-  
-  (def c1 (consumer e {} [:foo :bar] (fn [_ k v] (println "for c1 - k" k "v" v))))
-
-  (def c2 (consumer e {} [:foo :ball] (fn [_ k v] (println "for c2 - k" k "v" v))))
-  
-  )
-
 
 (comment
 
@@ -125,15 +112,21 @@
                                           :replication 3}}
                   :conn {:nodes [["pkc-419q3.us-east4.gcp.confluent.cloud" 9092]]}
                   :config (merge base-config
-                                 {"client.id" "my-producer"
+                                 {"auto.create.topics.enable" true
+                                  "client.id" "my-producer"
                                   "acks" "all"})}))
 
-  (send! e :test-stream :k :v)
-  
-  (def c1 (consumer e {"auto.offset.reset" "earliest"
-                       "enable.auto.commit" true
-                       "group.id"           "my-group"}
-                    [:test-stream]
-                    (fn [stream k v] (println stream k v))))
+  (def test-stream (stream {:name :test1
+                            :engine e
+                            :key.serde (serde/serde :keyword)
+                            :value.serde (serde/serde :keyword)
+                            :partitions 1
+                            :replication 3}))
 
-  )
+  (send! test-stream :k :v)
+  
+  #_(def c1 (consumer e {"auto.offset.reset" "earliest"
+                         "enable.auto.commit" true
+                         "group.id"           "my-group"}
+                      [:test-stream]
+                      (fn [stream k v] (println stream k v)))))
