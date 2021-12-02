@@ -18,7 +18,7 @@
 (defmethod engine/consumer :in-memory
   [streams handle-fn opts]
   (let [sub-chans (mapv (fn [{:keys [stream-pub] :as stream}]
-                          (let [sub-chan (chan 256)]
+                          (let [sub-chan (chan 1024)]
                             (sub stream-pub (:name stream) sub-chan)
                             sub-chan))
                         streams)]

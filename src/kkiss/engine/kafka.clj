@@ -27,25 +27,41 @@
      :conn conn
      :config config}))
 
-(defmethod engine/stream :kafka [opts]
-  opts)
-
-(defn ^:private create-topic [{:keys [engine] :as stream}]
-  (println "creating topic")
+(defn ^:private create-topic* [{stream-config :config
+                                :keys [ engine partitions replication]
+                                :or {partitions 1 replication 3}
+                                :as stream}]
   (let [{:keys [conn config]} engine
         {:keys [nodes]} conn
-        {:keys [partitions replication]
-         :or {partitions 1 replication 3}} stream
         topic-name (topic-name-serializer (:name stream))]
-    (println "topic-name" topic-name)
     (with-open [client (admin/admin {::admin/configuration config
                                      ::kafka/nodes nodes})]
-      (println "client good")
-      @(get (admin/create-topics client
-                                 {topic-name
-                                  {::admin/number-of-partitions partitions
-                                   ::admin/replication-factor replication}})
-            topic-name))))
+      (admin/create-topics
+       client
+       (assoc {} topic-name
+              (merge (or stream-config {})
+                     {::admin/number-of-partitions partitions
+                      ::admin/replication-factor replication})))
+      topic-name)))
+
+(defn ^:private topic-exists? [{:keys [engine]
+                                :as stream}]
+  (let [{:keys [conn config]} engine
+        {:keys [nodes]} conn
+        topic-name (topic-name-serializer (:name stream))]
+    (with-open [client (admin/admin {::admin/configuration config
+                                     ::kafka/nodes nodes})]
+      (let [topics (-> client
+                       (admin/topics {::kafka/internal? false})
+                       deref
+                       keys
+                       set)]
+        (boolean (topics topic-name))) )))
+
+(defmethod engine/stream :kafka [opts]
+  (when-not (topic-exists? opts)
+    (create-topic* opts))
+  opts)
 
 (defmethod engine/send! :kafka [{:keys [engine] :as stream} k v]
   (let [producer (:producer engine)
@@ -59,43 +75,37 @@
     (try
       (send-fn)
       (catch Throwable t
-        (println "deu ruim")
-        (if (= org.apache.kafka.common.errors.InvalidTopicException (type (.getCause t)))
-          (do
-            (create-topic stream)
-            (println "came back, trying again")
-            (send-fn))
-          (throw t))))))
+        (println "deu ruim")))))
 
 #_(defmethod engine/consumer :kafka [{:keys [config conn] :as engine} opts streams handle-fn]
-    (let [{:keys [nodes]} conn
-          consumer (in/consumer {::kafka/nodes nodes
-                                 ::in/configuration (merge config opts)})]
-      (in/register-for consumer (mapv topic-name-serializer streams))
-      {:engine engine
-       :streams streams
-       :consumer consumer
-       :handle-fn handle-fn
-       :state (atom :stopped)}))
+(let [{:keys [nodes]} conn
+      consumer (in/consumer {::kafka/nodes nodes
+                             ::in/configuration (merge config opts)})]
+  (in/register-for consumer (mapv topic-name-serializer streams))
+  {:engine engine
+   :streams streams
+   :consumer consumer
+   :handle-fn handle-fn
+   :state (atom :stopped)}))
 
 #_(defmethod engine/start! :kafka [{:keys [consumer handle-fn state] :as consumer}]
-    (when (= :stopped @state)
-      (go-loop []
-        (println "polling...")
-        (doseq [record (in/poll consumer
-                                {::kafka/timeout [2 :seconds]})]
-          #_(println (format "Record %d @%d - Key = %d, Value = %d"
-                             (::kafka/offset record)
-                             (::kafka/timestamp record)
-                             (::kafka/key record)
-                             (::kafka/value record)))
-          (handle-fn (topic-name-deserializer (::kafka/topic record))
-                     (::kafka/key record)
-                     (::kafka/value record)))
-        (when (= :running @state)
-          (recur)))
-      (reset! state :running))
-    
+(when (= :stopped @state)
+  (go-loop []
+    (println "polling...")
+    (doseq [record (in/poll consumer
+                            {::kafka/timeout [2 :seconds]})]
+      #_(println (format "Record %d @%d - Key = %d, Value = %d"
+                         (::kafka/offset record)
+                         (::kafka/timestamp record)
+                         (::kafka/key record)
+                         (::kafka/value record)))
+      (handle-fn (topic-name-deserializer (::kafka/topic record))
+                 (::kafka/key record)
+                 (::kafka/value record)))
+    (when (= :running @state)
+      (recur)))
+  (reset! state :running))
+
     #_(when (= :stopped @state)
         (doseq [sub-chan sub-chans]
           (go-loop []

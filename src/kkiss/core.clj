@@ -32,7 +32,8 @@
                                   (get-in [:value.serde :deserializer]))]
                      (try
                        (handle-fn stream (k-de k) (v-de v))
-                       (catch Throwable _
+                       (catch Throwable ex
+                         (println "OPA!!! erro aqui" ex)
                          (comment "ignore exception for now")))))]
      (engine/consumer streams wrapper opts))))
 
@@ -106,17 +107,13 @@
                     "client.dns.lookup" "use_all_dns_ips"})
 
   (def e (engine {:engine-id :kafka
-                  :streams {:test-stream {:key.serde (serde/serde :keyword)
-                                          :value.serde (serde/serde :keyword)
-                                          :partitions 1
-                                          :replication 3}}
                   :conn {:nodes [["pkc-419q3.us-east4.gcp.confluent.cloud" 9092]]}
                   :config (merge base-config
                                  {"auto.create.topics.enable" true
                                   "client.id" "my-producer"
                                   "acks" "all"})}))
 
-  (def test-stream (stream {:name :test1
+  (def test-stream (stream {:name :test-stream
                             :engine e
                             :key.serde (serde/serde :keyword)
                             :value.serde (serde/serde :keyword)
