@@ -31,7 +31,7 @@
                          v-de (-> streams (find-stream stream-name)
                                   (get-in [:value.serde :deserializer]))]
                      (try
-                       (handle-fn stream (k-de k) (v-de v))
+                       (handle-fn stream-name (k-de k) (v-de v))
                        (catch Throwable ex
                          (println "OPA!!! erro aqui" ex)
                          (comment "ignore exception for now")))))]
@@ -108,22 +108,27 @@
 
   (def e (engine {:engine-id :kafka
                   :conn {:nodes [["pkc-419q3.us-east4.gcp.confluent.cloud" 9092]]}
-                  :config (merge base-config
-                                 {"auto.create.topics.enable" true
-                                  "client.id" "my-producer"
-                                  "acks" "all"})}))
+                  :config base-config}))
 
   (def test-stream (stream {:name :test-stream
                             :engine e
                             :key.serde (serde/serde :keyword)
                             :value.serde (serde/serde :keyword)
                             :partitions 1
-                            :replication 3}))
+                            :replication 3
+                            :config {"client.id" "my-producer"
+                                     "acks" "all"}}))
 
-  (send! test-stream :k :v)
+  (send! test-stream :k :v6)
   
-  #_(def c1 (consumer e {"auto.offset.reset" "earliest"
-                         "enable.auto.commit" true
-                         "group.id"           "my-group"}
-                      [:test-stream]
-                      (fn [stream k v] (println stream k v)))))
+  (def c1 (consumer [test-stream]
+                    (fn [stream k v] (println stream k v))
+                    {:config {"auto.offset.reset" "earliest"
+                              "enable.auto.commit" true
+                              "group.id"           "my-group1"}}))
+
+  (start! c1)
+
+  (stop! c1)
+
+  )
