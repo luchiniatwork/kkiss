@@ -67,14 +67,10 @@
     (assoc opts :producer producer)))
 
 (defmethod engine/send! :kafka [{:keys [producer] :as stream} k v]
-  (let [topic-name (topic-name-serializer (:name stream))
-        send-fn (fn [] @(out/send producer {::kafka/topic topic-name
-                                            ::kafka/key k
-                                            ::kafka/value v}))]
-    (try
-      (send-fn)
-      (catch Throwable t
-        (println "deu ruim")))))
+  (let [topic-name (topic-name-serializer (:name stream))]
+    @(out/send producer {::kafka/topic topic-name
+                         ::kafka/key k
+                         ::kafka/value v})))
 
 (defmethod engine/consumer :kafka [streams handle-fn opts]
   (let [engine (-> streams first :engine)
@@ -84,28 +80,32 @@
                                ::in/configuration (merge config (:config opts))})]
     (in/register-for consumer (mapv #(-> % :name topic-name-serializer)
                                     streams))
-    {:engine engine
-     :streams streams
-     :consumer consumer
-     :handle-fn handle-fn
-     :state (atom :stopped)}))
+    (assoc opts
+           :engine engine
+           :streams streams
+           :consumer consumer
+           :handle-fn handle-fn
+           :state (atom :stopped))))
 
-(defmethod engine/start! :kafka [{:keys [consumer handle-fn state]
-                                  :as consumer}]
+(defmethod engine/start! :kafka [{:keys [consumer handle-fn state polling-timeout]
+                                  :or {polling-timeout 200}}]
   (when (= :stopped @state)
     (go-loop []
-      (println "polling...")
       (doseq [record (in/poll consumer
-                              {::kafka/timeout [2 :seconds]})]
-        #_(println (::kafka/offset record)
-                   (::kafka/timestamp record)
+                              {::kafka/timeout [polling-timeout :milliseconds]})]
+        #_(println (::kafka/topic record)
+                   (::kafka/partition record)
+                   (::kafka/offset record)
                    (::kafka/key record)
-                   (::kafka/value record))
+                   (::kafka/value record)
+                   (::kafka/timestamp record))
         (handle-fn (topic-name-deserializer (::kafka/topic record))
                    (::kafka/key record)
                    (::kafka/value record)))
-      (when (= :running @state)
-        (recur)))
+      (if (= :running @state)
+        (recur)
+        (do (in/unregister consumer)
+            (in/close consumer))))
     (reset! state :running)))
 
 

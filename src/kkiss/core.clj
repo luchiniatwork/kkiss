@@ -119,16 +119,17 @@
                             :config {"client.id" "my-producer"
                                      "acks" "all"}}))
 
-  (send! test-stream :k :v6)
+  (send! test-stream :k :v6666)
   
-  (def c1 (consumer [test-stream]
+  (def c3 (consumer [test-stream]
                     (fn [stream k v] (println stream k v))
-                    {:config {"auto.offset.reset" "earliest"
+                    {:polling-timeout 2000
+                     :config {"auto.offset.reset" "earliest"
                               "enable.auto.commit" true
-                              "group.id"           "my-group1"}}))
+                              "group.id"           "my-group4"}}))
 
-  (start! c1)
+  (start! c3)
 
-  (stop! c1)
+  (stop! c3)
 
   )
