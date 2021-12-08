@@ -41,9 +41,9 @@
     <packaging>clojure</packaging>
 
   <scm>
-    <connection>scm:git:git@github.com:luchiniatwork/anomalies.git</connection>
-    <developerConnection>scm:git:git@github.com:luchiniatwork/anomalies.git</developerConnection>
-    <url>https://github.com/luchiniatwork/anomalies</url>
+    <connection>scm:git:git@github.com:luchiniatwork/kkiss.git</connection>
+    <developerConnection>scm:git:git@github.com:luchiniatwork/kkiss.git</developerConnection>
+    <url>https://github.com/luchiniatwork/kkiss</url>
   </scm>
 
   <distributionManagement>
