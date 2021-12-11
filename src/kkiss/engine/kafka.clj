@@ -93,15 +93,13 @@
     (go-loop []
       (doseq [record (in/poll consumer
                               {::kafka/timeout [polling-timeout :milliseconds]})]
-        #_(println (::kafka/topic record)
-                   (::kafka/partition record)
-                   (::kafka/offset record)
-                   (::kafka/key record)
+        (handle-fn (::kafka/key record)
                    (::kafka/value record)
-                   (::kafka/timestamp record))
-        (handle-fn (topic-name-deserializer (::kafka/topic record))
-                   (::kafka/key record)
-                   (::kafka/value record)))
+                   {:stream-name (topic-name-deserializer (::kafka/topic record))
+                    ::topic (::kafka/topic record)
+                    ::partition (::kafka/partition record)
+                    ::offset (::kafka/offset record)
+                    ::timestamp (::kafka/timestamp record)}))
       (if (= :running @state)
         (recur)
         (do (in/unregister consumer)

@@ -33,9 +33,9 @@
     (doseq [sub-chan sub-chans]
       (go-loop []
         (let [{:keys [stream-name stream-payload] :as event} (<! sub-chan)]
-          (handle-fn stream-name
-                     (first stream-payload)
-                     (second stream-payload)))
+          (handle-fn (first stream-payload)
+                     (second stream-payload)
+                     {:stream-name stream-name}))
         (when (= :running @state)
           (recur))))))
 

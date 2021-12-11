@@ -25,17 +25,30 @@
   ([streams handle-fn]
    (consumer streams handle-fn nil))
   ([streams handle-fn opts]
-   (let [wrapper (fn [stream-name k v]
-                   (let [k-de (-> streams (find-stream stream-name)
-                                  (get-in [:key.serde :deserializer]))
-                         v-de (-> streams (find-stream stream-name)
-                                  (get-in [:value.serde :deserializer]))]
-                     (try
-                       (handle-fn stream-name (k-de k) (v-de v))
-                       (catch Throwable ex
-                         (println "OPA!!! erro aqui" ex)
-                         (comment "ignore exception for now")))))]
-     (engine/consumer streams wrapper opts))))
+   (let [arity-3? (or (>= 2 (->> handle-fn
+                                 clojure.reflect/reflect
+                                 :members
+                                 (filter #(= 'invoke (:name %)))
+                                 :param-types
+                                 count))
+                      (->> handle-fn
+                           clojure.reflect/reflect
+                           :members
+                           (filter #(= 'doInvoke (:name %)))
+                           seq))]
+     (let [wrapper (fn [k v opts]
+                     (let [k-de (-> streams (find-stream stream-name)
+                                    (get-in [:key.serde :deserializer]))
+                           v-de (-> streams (find-stream stream-name)
+                                    (get-in [:value.serde :deserializer]))]
+                       (try
+                         (if arity-3?
+                           (handle-fn (k-de k) (v-de v) opts)
+                           (handle-fn (k-de k) (v-de v)))
+                         (catch Throwable ex
+                           (println "Ignored exeption" ex)
+                           (comment "ignore exception for now")))))]
+       (engine/consumer streams wrapper opts)))))
 
 (defn start! [consumer]
   (engine/start! consumer))
@@ -57,11 +70,11 @@
                            :value.serde (serde/serde :keyword)})
          c1-visited (atom 0)
          c2-visited (atom 0)
-         c1 (consumer [stream-a] (fn [s-name k v]
+         c1 (consumer [stream-a] (fn [k v]
                                    (when (and (= k :foo)
                                               (= v :bar))
                                      (swap! c1-visited inc))))
-         c2 (consumer [stream-a stream-b] (fn [_ k v]
+         c2 (consumer [stream-a stream-b] (fn [k v]
                                             (when (and (= k :foo)
                                                        (= v :bar))
                                               (swap! c2-visited inc))))]
@@ -79,7 +92,7 @@
                            :key.serde (serde/serde :keyword)
                            :value.serde (serde/serde :keyword)})
          c-visited (atom 0)
-         c (consumer [stream-a] (fn [_ k v]
+         c (consumer [stream-a] (fn [k v]
                                   (if (and (= k :foo)
                                            (= v :bar))
                                     (swap! c-visited inc)
@@ -122,7 +135,7 @@
   (send! test-stream :k :v6666)
   
   (def c3 (consumer [test-stream]
-                    (fn [stream k v] (println stream k v))
+                    (fn [k v] (println stream k v))
                     {:polling-timeout 2000
                      :config {"auto.offset.reset" "earliest"
                               "enable.auto.commit" true
