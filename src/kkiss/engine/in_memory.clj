@@ -13,7 +13,8 @@
 
 (defmethod engine/send! :in-memory [{:keys [in-chan] :as stream} k v]
   (put! in-chan {:stream-name (:name stream)
-                 :stream-payload [k v]}))
+                 :stream-payload [k v]
+                 :stream-timestamp (System/currentTimeMillis)}))
 
 (defmethod engine/consumer :in-memory
   [streams handle-fn opts]
@@ -32,10 +33,13 @@
     (reset! state :running)
     (doseq [sub-chan sub-chans]
       (go-loop []
-        (let [{:keys [stream-name stream-payload] :as event} (<! sub-chan)]
+        (let [{:keys [stream-name
+                      stream-payload
+                      stream-timestamp] :as event} (<! sub-chan)]
           (handle-fn (first stream-payload)
                      (second stream-payload)
-                     {:stream-name stream-name}))
+                     {:stream-name stream-name
+                      :timestamp stream-timestamp}))
         (when (= :running @state)
           (recur))))))
 
