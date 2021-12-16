@@ -2,6 +2,8 @@
   (:require #_[hyperfiddle.rcf :refer [tests]]
             [kkiss.engine :as engine]
             [kkiss.serde :as serde]
+            [jsonista.core         :as json]
+            [jsonista.tagged       :as jt]
             [^:keep kkiss.engine.in-memory]
             [^:keep kkiss.engine.kafka]))
 
@@ -203,23 +205,26 @@
                   :conn {:nodes [["pkc-419q3.us-east4.gcp.confluent.cloud" 9092]]}
                   :config base-config}))
 
-  (def test-stream (stream {:name :test-stream
+  (def test-stream (stream {:name :test-stream18
                             :engine e
                             :key.serde (serde/serde :keyword)
                             :value.serde (serde/serde :keyword)
-                            :partitions 1
-                            :replication 3
-                            :config {"client.id" "my-producer"
-                                     "acks" "all"}}))
+                            :kkiss.engine.kafka/topic-config
+                            {"retention.ms" "-1"}
+                            :kkiss.engine.kafka/producer-config
+                            {"client.id" "my-producer"
+                             "acks" "all"}
+                            :kkiss.engine.kafka/partitions 3
+                            :kkiss.engine.kafka/replication 3}))
 
   (send! test-stream :k :v677)
   
   (def c3 (consumer [test-stream]
                     (fn [k v] (println k v))
-                    {:polling-timeout 2000
-                     :config {"auto.offset.reset" "earliest"
-                              "enable.auto.commit" true
-                              "group.id"           "my-group4"}}))
+                    {:kkiss.engine.kafka/polling-timeout 2000
+                     :kkiss.engine.kafka/config {"auto.offset.reset" "earliest"
+                                                 "enable.auto.commit" true
+                                                 "group.id"           "my-group4"}}))
 
   (start! c3)
 
@@ -231,11 +236,11 @@
   (def c4 (consumer [test-stream]
                     (fn [k v]
                       (println k v))
-                    {:polling-timeout 2000
+                    {:kkiss.engine.kafka/polling-timeout 2000
                      :kkiss.engine.kafka/commit-behavior :do-not-manually-commit
-                     :config {"auto.offset.reset" "earliest"
-                              "enable.auto.commit" false
-                              "group.id"           "my-group6"}}))
+                     :kkiss.engine.kafka/config {"auto.offset.reset" "earliest"
+                                                 "enable.auto.commit" false
+                                                 "group.id"           "my-group6"}}))
 
   (start! c4)
 
@@ -247,14 +252,71 @@
                       (when (= :v7777 v)
                         (throw (ex-info "what is this?" {})))
                       (println k v))
-                    {:polling-timeout 200
-                     :config {"auto.offset.reset" "earliest"
-                              "enable.auto.commit" false
-                              "group.id"           "my-group15"}}))
+                    {:kkiss.engine.kafka/polling-timeout 200
+                     :kkiss.engine.kafka/config {"auto.offset.reset" "earliest"
+                                                 "enable.auto.commit" false
+                                                 "group.id"           "my-group15"}}))
 
   (start! c5)
 
   (stop! c5)
 
+
+  ;; json test
+
+  (def mapper (json/object-mapper
+               {:encode-key-fn true
+                :decode-key-fn true
+                :modules [(jt/module
+                           {:handlers {clojure.lang.Keyword {:tag "~k"
+                                                             :encode jt/encode-keyword
+                                                             :decode keyword}
+                                       clojure.lang.PersistentHashSet {:tag "~s"
+                                                                       :encode jt/encode-collection
+                                                                       :decode set}
+                                       java.util.Date {:tag "~d"
+                                                       :encode (fn [^java.util.Date d, ^com.fasterxml.jackson.core.JsonGenerator gen]
+                                                                 (.writeNumber gen (.getTime d)))
+                                                       :decode (fn [n] (java.util.Date. ^int n))}}})]}))
   
+  (def test-stream (stream {:name :test-stream-json
+                            :engine e
+                            :key.serde (serde/serde :string)
+                            :value.serde (serde/serde :json mapper)
+                            :kkiss.engine.kafka/topic-config
+                            {"retention.ms" "-1"}
+                            :kkiss.engine.kafka/producer-config
+                            {"client.id" "my-producer"
+                             "acks" "all"}
+                            :kkiss.engine.kafka/partitions 1
+                            :kkiss.engine.kafka/replication 3}))
+
+  (send! test-stream "1" {:a :b
+                          "tiago qwe" "bar"
+                          "nope" [1 2 3 :qwe/qwe]
+                          "nah" #{::foo ::bar}
+                          :foo/bar (java.util.Date.)
+                          "uuid" (java.util.UUID/randomUUID)})
+  
+  (def json-c (consumer [test-stream]
+                        (fn [k v]
+                          (println k)
+                          (clojure.pprint/pprint v))
+                        {:kkiss.engine.kafka/config {"auto.offset.reset" "earliest"
+                                                     "enable.auto.commit" false
+                                                     "group.id"           "my-group16"}}))
+
+  (start! json-c)
+
+  (stop! json-c)
+  )
+
+
+
+(comment
+
+  (with-open [a (dvlopt.kafka.admin/admin {:dvlopt.kafka.admin/configuraion base-config
+                                           :dvlopt.kafka/nodes [["pkc-419q3.us-east4.gcp.confluent.cloud" 9092]]})]
+    @(dvlopt.kafka.admin/topics a {:dvlopt/kafka/internal? false}))
+
   )

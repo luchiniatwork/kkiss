@@ -24,21 +24,23 @@
    :conn conn
    :config config})
 
-(defn ^:private create-topic* [{stream-config :config
-                                :keys [ engine partitions replication]
-                                :or {partitions 1 replication 3}
+(defn ^:private create-topic* [{:keys [engine ::partitions
+                                       ::replication ::topic-config]
                                 :as stream}]
   (let [{:keys [conn config]} engine
         {:keys [nodes]} conn
-        topic-name (topic-name-serializer (:name stream))]
+        topic-name (topic-name-serializer (:name stream))
+        topic-config' (or topic-config {"retention.ms" "-1"} )]
     (with-open [client (admin/admin {::admin/configuration config
                                      ::kafka/nodes nodes})]
-      (admin/create-topics
-       client
-       (assoc {} topic-name
-              (merge stream-config
-                     {::admin/number-of-partitions partitions
-                      ::admin/replication-factor replication})))
+      (-> client
+          (admin/create-topics
+           (assoc {} topic-name
+                  {::admin/number-of-partitions (or partitions 1)
+                   ::admin/replication-factor (or replication 3)
+                   ::admin/configuration.topic topic-config'}))
+          (get topic-name)
+          deref)
       topic-name)))
 
 (defn ^:private topic-exists? [{:keys [engine]
@@ -53,10 +55,9 @@
                        deref
                        keys
                        set)]
-        (boolean (topics topic-name))) )))
+        (boolean (topics topic-name))))))
 
-(defmethod engine/stream :kafka [{stream-config :config
-                                  :keys [engine]
+(defmethod engine/stream :kafka [{:keys [engine ::producer-config]
                                   :as opts}]
   (when-not (topic-exists? opts)
     (create-topic* opts))
@@ -64,7 +65,7 @@
         {:keys [nodes]} conn
         producer (out/producer {::kafka/nodes nodes
                                 ::out/configuration (merge config
-                                                           stream-config)})]
+                                                           producer-config)})]
     (assoc opts :producer producer)))
 
 (defmethod engine/send! :kafka [{:keys [producer] :as stream} k v]
@@ -75,7 +76,7 @@
 
 (defmethod engine/consumer :kafka [streams handle-fn
                                    {:keys [continuation
-                                           kkiss.engine.kafka/commit-behavior]
+                                           ::commit-behavior]
                                     :or {commit-behavior :latest-before-failure}
                                     :as opts}]
   (when (and (= :latest-before-failure commit-behavior)
@@ -89,7 +90,7 @@
         {:keys [conn config]} engine
         {:keys [nodes]} conn
         consumer (in/consumer {::kafka/nodes nodes
-                               ::in/configuration (merge config (:config opts))})]
+                               ::in/configuration (merge config (::config opts))})]
     (in/register-for consumer (mapv #(-> % :name topic-name-serializer)
                                     streams))
     (assoc opts
@@ -99,8 +100,9 @@
            :handle-fn handle-fn
            :state (atom :stopped))))
 
-(defmethod engine/start! :kafka [{:keys [consumer handle-fn state polling-timeout
-                                         kkiss.engine.kafka/commit-behavior]
+(defmethod engine/start! :kafka [{:keys [consumer handle-fn state
+                                         ::polling-timeout
+                                         ::commit-behavior]
                                   :or {polling-timeout 200
                                        commit-behavior :latest-before-failure}}]
   (when (= :stopped @state)

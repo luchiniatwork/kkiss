@@ -61,9 +61,9 @@
 
 
 
-(defmethod serde :default [kind]
-  {:serializer (serializer kind)
-   :deserializer (deserializer kind)})
+(defmethod serde :default [kind & args]
+  {:serializer (apply serializer kind args)
+   :deserializer (apply deserializer kind args)})
 
 
 #_(tests
