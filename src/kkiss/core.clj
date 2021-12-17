@@ -2,8 +2,6 @@
   (:require #_[hyperfiddle.rcf :refer [tests]]
             [kkiss.engine :as engine]
             [kkiss.serde :as serde]
-            [jsonista.core         :as json]
-            [jsonista.tagged       :as jt]
             [^:keep kkiss.engine.in-memory]
             [^:keep kkiss.engine.kafka]))
 
