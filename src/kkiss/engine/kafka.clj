@@ -63,12 +63,16 @@
     (create-topic* opts))
   (let [{:keys [conn config]} engine
         {:keys [nodes]} conn
-        producer (out/producer {::kafka/nodes nodes
-                                ::out/configuration (merge config
-                                                           producer-config)})]
+        producer (when producer-config
+                   (out/producer {::kafka/nodes nodes
+                                  ::out/configuration (merge config
+                                                             producer-config)}))]
     (assoc opts :producer producer)))
 
 (defmethod engine/send! :kafka [{:keys [producer] :as stream} k v]
+  (when (nil? producer)
+    (anom/throw-anom "Stream is not configured to produce."
+                     {:category ::anom/incorrect}))
   (let [topic-name (topic-name-serializer (:name stream))]
     @(out/send producer {::kafka/topic topic-name
                          ::kafka/key k
