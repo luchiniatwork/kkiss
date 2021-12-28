@@ -1,6 +1,6 @@
 (ns kkiss.engine.kafka
   (:require [anomalies.core :as anom]
-            [clojure.core.async :refer [<! >! go go-loop chan pub sub put!]]
+            [clojure.core.async :refer [thread] :as async]
             [clojure.string :as s]
             [dvlopt.kafka :as kafka]
             [dvlopt.kafka.admin :as admin]
@@ -106,36 +106,37 @@
                                   :or {polling-timeout 200
                                        commit-behavior :latest-before-failure}}]
   (when (= :stopped @state)
-    (go-loop []
-      (let [last-partition (atom nil)
-            last-offset (atom nil)]
-        (doseq [record (in/poll consumer
-                                {::kafka/timeout [polling-timeout :milliseconds]})]
-          (try
-            (reset! last-partition
-                    [(::kafka/topic record) (::kafka/partition record)])
-            (reset! last-offset (::kafka/offset record))
-            (handle-fn (::kafka/key record)
-                       (::kafka/value record)
-                       {:stream-name (topic-name-deserializer (::kafka/topic record))
-                        :timestamp (::kafka/timestamp record)
-                        ::topic (::kafka/topic record)
-                        ::partition (::kafka/partition record)
-                        ::offset (::kafka/offset record)})
-            (catch Exception ex
-              (when (= :latest-before-failure commit-behavior)
-                (in/commit-offsets consumer
-                                   {::in/topic-partition->offset
-                                    {@last-partition
-                                     @last-offset}}))
-              (throw ex)))))
-      (when (= :latest-before-failure commit-behavior)
-        (in/commit-offsets consumer))
-      (if (= :running @state)
-        (recur)
-        (do (in/unregister consumer)
-            (in/close consumer))))
-    (reset! state :running)))
+    (reset! state :running)
+    (thread
+      (loop []
+        (let [last-partition (atom nil)
+              last-offset (atom nil)]
+          (doseq [record (in/poll consumer
+                                  {::kafka/timeout [polling-timeout :milliseconds]})]
+            (try
+              (reset! last-partition
+                      [(::kafka/topic record) (::kafka/partition record)])
+              (reset! last-offset (::kafka/offset record))
+              (handle-fn (::kafka/key record)
+                         (::kafka/value record)
+                         {:stream-name (topic-name-deserializer (::kafka/topic record))
+                          :timestamp (::kafka/timestamp record)
+                          ::topic (::kafka/topic record)
+                          ::partition (::kafka/partition record)
+                          ::offset (::kafka/offset record)})
+              (catch Exception ex
+                (when (= :latest-before-failure commit-behavior)
+                  (in/commit-offsets consumer
+                                     {::in/topic-partition->offset
+                                      {@last-partition
+                                       @last-offset}}))
+                (throw ex)))))
+        (when (= :latest-before-failure commit-behavior)
+          (in/commit-offsets consumer))
+        (if (= :running @state)
+          (recur)
+          (do (in/unregister consumer)
+              (in/close consumer)))))))
 
 
 (defmethod engine/stop! :kafka [{:keys [state] :as consumer}]
