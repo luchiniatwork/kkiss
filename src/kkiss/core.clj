@@ -215,7 +215,7 @@
                             :kkiss.engine.kafka/partitions 3
                             :kkiss.engine.kafka/replication 3}))
 
-  (send! test-stream :k :v677)
+  (send! test-stream :k :v999)
   
   (def c3 (consumer [test-stream]
                     (fn [k v] (println k v))
@@ -300,9 +300,10 @@
                         (fn [k v]
                           (println k)
                           (clojure.pprint/pprint v))
-                        {:kkiss.engine.kafka/config {"auto.offset.reset" "earliest"
-                                                     "enable.auto.commit" false
-                                                     "group.id"           "my-group16"}}))
+                        {:kkiss.engine.kafka/config
+                         {"auto.offset.reset" "earliest"
+                          "enable.auto.commit" false
+                          "group.id"           "my-group16"}}))
 
   (start! json-c)
 

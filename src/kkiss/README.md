@@ -1,4 +1,4 @@
-## Failure behaviour
+## Consumer Failure behaviour
 
 ### Continuation behavior
 
